@@ -685,6 +685,7 @@
 
   const updateSourceTimeout = (timeout, start) => {
     // Not done yet. Let's wait and check again.
+    displayTimeout(timeout, null);
     let x = setInterval(
       // Add countdown
       () => {
