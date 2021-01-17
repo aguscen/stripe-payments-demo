@@ -70,30 +70,40 @@ router.post('/payment_intents', async (req, res, next) => {
 // Create source in server side, for IND CT 
 router.post('/sources', async (req,res) => {
   const {
-    bank='bni',  //  bca or bni
-    account_number_suffix ='10000091', 
-    name='Shengwei',
-    currency='idr',
-    type='id_credit_transfer',
+    owner,
+    currency,
+    type,
+    usage,
+    amount,
+    items,
   } = req.body;
 
   try {
-    const source = await stripe.sources.create({
-      type,
-      currency,
-      id_credit_transfer: {
-        bank,
-        // account_number_suffix, // not supported yet
-        // account_number: account_number_suffix,
-        // expires_after: new Date("2020-02-01").valueOf(),
-      },
-      owner: {
-        name,
-      },
-      usage: "reusable"
-    });
+    let source;
+    if (type == 'id_credit_transfer') {
+      const { id_credit_transfer } = req.body;
+      source = await stripe.sources.create({
+        type,
+        currency,
+        amount,
+        id_credit_transfer,
+        owner,
+        usage,
+      });
+
+      console.log(source);
+
+    } else {
+      source = await stripe.sources.create({
+        type,
+        currency,
+        amount,
+        owner
+      });
+    }
 
     return res.status(200).json({source});
+
   } catch (err) {
     return res.status(500).json({error: err.message});
   }
@@ -232,5 +242,13 @@ router.get('/payment_intents/:id/status', async (req, res) => {
   const paymentIntent = await stripe.paymentIntents.retrieve(req.params.id);
   res.json({paymentIntent: {status: paymentIntent.status}});
 });
+
+// Retrieve the PaymentIntent status.
+router.get('/source/:id/status', async (req, res) => {
+  const source = await stripe.source.retrieve(req.params.id);
+  console.log(source);
+  res.json({source: {status: source.status}});
+});
+
 
 module.exports = router;

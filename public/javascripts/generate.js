@@ -4,7 +4,7 @@
 const faker = window.faker;
 const generateInputTrigger = document.getElementById('generate');
 faker.locale = 'id_ID';
-const {name, address, internet} = faker;
+const {name, address, internet, phone} = faker;
 
 generateInputTrigger.addEventListener('click', () => {
   document.getElementsByName('name')[0].value = `${name.firstName()} ${name.lastName()}`;
@@ -13,4 +13,5 @@ generateInputTrigger.addEventListener('click', () => {
   document.getElementsByName('city')[0].value = `${address.city()}`;
   document.getElementsByName('state')[0].value = `${address.state()}`;
   document.getElementsByName('postal_code')[0].value = `${address.zipCode()}`;
+  document.getElementsByName('phone')[0].value = `${phone.phoneNumber()}`;
 });

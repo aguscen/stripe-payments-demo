@@ -220,7 +220,7 @@
 
   // Check if the Payment Request is available (or Apple Pay on the Web).
   const paymentRequestSupport = await paymentRequest.canMakePayment();
-  if (paymentRequestSupport) {
+  if (paymentRequestSupport && config.stripeCountry !== 'ID') {
     // Display the Pay button by mounting the Element in the DOM.
     paymentRequestButton.mount('#payment-request-button');
     // Replace the instruction.
@@ -258,6 +258,7 @@
     const country = form.querySelector('select[name=country] option:checked')
       .value;
     const email = form.querySelector('input[name=email]').value;
+    const phone = form.querySelector('input[name=phone]').value;
     const shipping = {
       name,
       address: {
@@ -306,19 +307,18 @@
       // Prepare all the Stripe source common data.
       const sourceData = {
         type: payment,
-        amount: paymentIntent.amount,
-        currency: paymentIntent.currency,
+        amount: store.getPaymentTotal(),
+        currency: config.currency,
         owner: {
           name,
           email,
+          phone,
+          address: shipping.address,
         },
         redirect: {
           return_url: window.location.href,
         },
-        statement_descriptor: 'Stripe Payments Demo',
-        metadata: {
-          paymentIntent: paymentIntent.id,
-        },
+        statement_descriptor: 'Stripe Payments Demo'
       };
 
       // Add extra source information which are specific to a payment method.
@@ -348,14 +348,13 @@
         case 'id_credit_transfer':
           let bank = form.querySelector('select[id=id-ct-element] option:checked')
       .value;
-          sourceData.id_credit_transfer = {
-            bank: bank
-          }
-          sourceData.owner.email = `amount_${paymentIntent.amount}@example.com`;
+          sourceData.id_credit_transfer = {bank: bank};
+          sourceData.usage = 'single_use';
+          // sourceData.usage = 'reusable';
 
           const {source} = await store.createSource({
-            currency: config.currency,
-            items: store.getLineItems()
+            items: store.getLineItems(),
+            ...sourceData,
           });
           
           console.log('Creating ID credit transfer from server side', source);
@@ -392,6 +391,8 @@
       mainElement.classList.remove('processing');
       mainElement.classList.remove('receiver');
       // Update the note about receipt and shipping (the payment has been fully confirmed by the bank).
+      confirmationElement.querySelector('#confirmation-custom').innerHTML = 
+        `Order reference number is <span>${paymentIntent.id}</span>`;
       confirmationElement.querySelector('.note').innerText =
         'We just sent your receipt to your email address, and your items will be on their way shortly.';
       mainElement.classList.add('success');
@@ -482,33 +483,7 @@
                 </li>
               </ul>`;
             break;
-          case 'id_credit_transfer':
-            amount = store.formatPrice(
-              store.getPaymentTotal(),
-              config.currency
-            );
-            // Display the Indonesia Bank Transfer information to the user.
-            const idct = source.id_credit_transfer;
-            receiverInfo.innerHTML = `
-              <ul>
-                <li>
-                  Amount:
-                  <strong>${amount}</strong>
-                </li>
-                <li>
-                  Bank Name:
-                  <strong>${idct.bank}</strong>
-                </li>
-                <li>
-                  Account Number:
-                  <strong>${idct.account_number}</strong>
-                </li>
-                <li>
-                  Routing Number:
-                  <strong>${idct.routing_number}</strong>
-                </li>
-              </ul>`;
-            break;
+          
           case 'multibanco':
             // Display the Multibanco payment information to the user.
             const multibanco = source.multibanco;
@@ -528,17 +503,214 @@
                 </li>
               </ul>`;
             break;
+
+          case 'id_credit_transfer':
+            amount = store.formatPrice(
+              store.getPaymentTotal(),
+              config.currency
+            );
+
+            // Show ID Credit Transfer Customized UI 
+            showBankTransferConfirmation(receiverInfo, source, amount);
+            break;
+
           default:
             console.log('Unhandled receiver flow.', source);
         }
-        // Poll the PaymentIntent status.
-        pollPaymentIntentStatus(paymentIntent.id);
         break;
+
       default:
         // Customer's PaymentIntent is received, pending payment confirmation.
         break;
     }
   };
+
+  const monthNames = ["January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"];
+
+  const formatDateTime = (date) => {
+    var hours = date.getHours();
+    var minutes = date.getMinutes();
+    var ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12; // the hour '0' should be '12'
+    minutes = minutes < 10 ? '0'+minutes : minutes;
+    var strTime = hours + ':' + minutes + ' ' + ampm;
+    return `${date.getDate()} ${monthNames[date.getMonth()]} ${date.getFullYear()} ${strTime}`;
+  }
+
+  const showBankTransferConfirmation = (receiverInfo, source, amount) => {
+    // Display the Indonesia Bank Transfer information to the user.
+    const idct = source.id_credit_transfer;
+
+    let bankDemoText = ''
+    if (idct.bank === 'bni') {
+      bankDemoText = `<ol>
+        <li>For demo, please select <strong>BNI &amp; Others</strong> banks.</li>
+        <li>1. Go to BNI <a href="http://dev.bni-ecollection.com/dev/flagging" target="_blank">Payment Simulator</a> page</li>
+        <li>2. Enter <strong>VA Number</strong> ${idct.account_number} and click search</li>
+        <li>3. Enter <strong>Payment Amount*</strong> ${source.amount/100}</li>
+        <li>4. Leave Direction as Credit</li>
+        <li>5. Click <strong style='color: green'>Flag</strong> button</li>
+      </ol>`;
+    }
+    if (idct.bank === 'bca') {
+      bankDemoText = `<ol>
+        <li>For demo, please select <strong>BNI &amp; Others</strong> banks.</li>
+        <li>1. Go to BCA <a href="https://admin.corp.stripe.com/excelsior/SimulateBCACommand" target="_blank">Payment Simulator</a> page</li>
+        <li>2. Use <strong>payment</strong> command.</li>
+        <li>3. Enter <strong>VA Number</strong> ${idct.account_number}</li>
+        <li>4. Enter <strong>Payment Amount*</strong> ${source.amount}</li>
+        <li>5. Enter <strong>Display Name*</strong> ${idct.display_name}</li>
+        <li>6. Click <strong style='color: green'>Run</strong> button</li>
+      </ol>`;
+    }
+
+    receiverInfo.innerHTML = `
+    <div class="info-header">
+      Order ID ${source.id}
+      <p id="count-down">00:00:00</p>
+      <p>Complete payment before <span>${formatDateTime(new Date(idct.expires_after * 1000))}</span></p>
+      
+    </div>
+
+    <div class="info-payment-details">
+      <ul>
+          <li>
+            Amount:
+            <strong>${amount}</strong>
+          </li>
+          <li>
+            Bank Name:
+            <strong>${idct.bank.toUpperCase()}</strong>
+          </li>
+          <li>
+            Account Number:
+            <strong>${idct.account_number}</strong>
+          </li>
+          <li>
+            Bank Code:
+            <strong>${idct.bank_code || idct.routing_number}</strong>
+          </li>
+        </ul>
+      </div>
+      
+      <div class="info-payment-guide">
+
+      <nav id="payment-guides" class="visible">
+        <ul>
+          <li class="visible">
+            <input type="radio" name="guides" id="guide-atm" value="atm">
+            <label for="guide-atm">ATM</label>
+          </li>
+          <li class="visible">
+            <input type="radio" name="guides" id="guide-ib" value="ib" checked>
+            <label for="guide-ib">Internet Banking</label>
+          </li>
+          <li class="visible">
+            <input type="radio" name="guides" id="guide-mb" value="mb">
+            <label for="guide-mb">Mobile Banking</label>
+          </li>
+          <li class="visible">
+            <input type="radio" name="guides" id="guide-branch" value="branch">
+            <label for="guide-branch">Branch</label>
+          </li>
+          <li class="visible">
+            <input type="radio" name="guides" id="guide-demo" value="demo">
+            <label for="guide-demo">Demo</label>
+          </li>
+        </ul>
+      </nav>
+
+      <div class="guide-info guide atm" id="guide-info-atm">
+        <ol>
+          <li>1. Select the "other" menu &gt; Transfer &gt; Saving Account</li>
+          <li>2. Enter the bank account number above (${idct.account_number})</li>
+          <li>3. Enter the amount shown above (${amount})</li>
+          <li>4. Enter news (optional)</li>
+          <li>5. Confirm Payment</li>
+          <li>6. Other ATMs</li>
+          <li>7. Select Transfers &gt; Transfer to another Bank</li>
+          <li>8. Enter (${idct.bank_code || idct.routing_number}) as the ${idct.bank.toUpperCase()} code</li>
+          <li>9. Enter paymetout &gt; Select Confirmation</li>
+        </ol>
+        <p>
+        </p>
+      </div>
+      <div class="guide-info guide ib visible" id="guide-info-ib">
+        <ol>
+          <li>1. Log in to ${idct.bank.toUpperCase()} internet banking: https://ibank.${idct.bank}.co.id</li>
+          <li>2. Select Transactions &gt; Virtual Billing Account </li>
+          <li>3. Enter ${idct.bank.toUpperCase()} Virtual Account &gt; Select account Number &gt; Continue</li>
+          <li>4. Enter the normal and the BNI M-Secure Code &gt; Process</li>
+        </ol>
+      </div>
+      <div class="guide-info guide mb" id="guide-info-mb">
+        <ol>
+          <li>1. Log in to ${idct.bank.toUpperCase()} mobile appliation</li>
+          <li>2. Select 'm-${idct.bank.toUpperCase()}', Enter access code. Then click 'Login' </li>
+          <li>3. Select 'm-Transfer'</li>
+          <li>4. Select '${idct.bank.toUpperCase()} Virtual Account'</li>
+          <li>5. Enter ${idct.bank.toUpperCase()} Virtual Account, press 'OK'</li>
+          <li>6. Press 'SEND'</li>
+          <li>7. Enter 'm-${idct.bank.toUpperCase()}' pin, enter 'OK'</li>
+        </ol>
+      </div>
+      <div class="guide-info guide branch" id="guide-info-branch">
+        <ol>
+          <li>1. ${idct.bank.toUpperCase()} Virtual Account Number: ${idct.account_number}</li>
+          <li>2. Fill in your name, fill in the date, select Rupiah </li>
+          <li>3. Hand over money and cash deposit slip to the counter</li>
+          <li>4. Save a copy of the cash deposit slip as proof of order payment</li>
+        </ol>
+      </div>
+      <div class="guide-info guide demo" id="guide-info-demo">
+        ${bankDemoText}
+      </div>
+      `;
+
+    for (let input of document.querySelectorAll('input[name=guides]')) {
+      input.addEventListener('change', event => {
+        event.preventDefault();
+        const guide = document.querySelector('input[name=guides]:checked').value;
+        
+        for (let guideInfo of document.querySelectorAll('div.guide-info.guide')) {
+          guideInfo.classList.toggle('visible', guideInfo.id == `guide-info-${guide}`)
+        }
+      })
+    }
+
+    updateSourceTimeout(new Date(idct.expires_after * 1000), null)
+  }
+
+  const updateSourceTimeout = (timeout, start) => {
+    // Not done yet. Let's wait and check again.
+    let x = setInterval(
+      // Add countdown
+      () => {
+        displayTimeout(timeout, null);
+        let timeLeft = timeout - (Date.now() - start);
+        if (timeLeft <=0) {
+          clearInterval(x);
+        }
+      },
+      60000,
+    );
+  }
+
+  const displayTimeout = (timeout, start) => {
+    const countDownEl = document.getElementById('count-down');
+    let timeLeft = timeout - (Date.now() - start);
+
+    if (timeLeft <= 0 ) {
+      countDownEl.innerText = 'Times Up'
+    } else {
+      let hour = parseInt(timeLeft / (60*60*1000))
+      let min = parseInt((timeLeft % (60*60*1000)) / (60*1000))
+      let sec = parseInt((timeLeft % (60*1000)) / (1000))
+      countDownEl.innerText = `${hour < 10 ? '0'+hour : hour}h ${min < 10 ? '0'+min : min}min left`;
+    }
+  }
 
   /**
    * Monitor the status of a source after a redirect flow.
@@ -559,6 +731,10 @@
     // Retrieve the PaymentIntent status from our server.
     const rawResponse = await fetch(`payment_intents/${paymentIntent}/status`);
     const response = await rawResponse.json();
+    
+    // Add countdown
+    displayTimeout(timeout, start);
+    
     if (
       !endStates.includes(response.paymentIntent.status) &&
       Date.now() < start + timeout
@@ -602,6 +778,7 @@
     mainElement.classList.add('checkout');
 
     // Create the PaymentIntent with the cart details.
+    // Note, this is not needed if the Payment Method uses Source API.
     const response = await store.createPaymentIntent(
       config.currency,
       store.getLineItems()
@@ -621,7 +798,7 @@
       name: 'Bank Transfer',
       flow: 'receiver',
       countries: ['US'],
-      currencies: ['usd'],
+      currencies: ['usd',],
     },
     alipay: {
       name: 'Alipay',
@@ -648,6 +825,9 @@
     card: {
       name: 'Card',
       flow: 'none',
+      countries: ['ALL'],
+      currencies: ['ALL'],
+      countries_excluded: ['ID'],
     },
     eps: {
       name: 'EPS',
@@ -714,7 +894,7 @@
       ],
     },
     id_credit_transfer: {
-      name: 'Indonesia Credit Transfer',
+      name: 'Bank Transfer',
       flow: 'receiver',
       countries: ['ID',],
       currencies: [
@@ -784,23 +964,36 @@
     const paymentInputs = form.querySelectorAll('input[name=payment]');
     for (let i = 0; i < paymentInputs.length; i++) {
       let input = paymentInputs[i];
-      input.parentElement.classList.toggle(
-        'visible',
-        input.value === 'card' ||
-          (config.paymentMethods.includes(input.value) &&
-            paymentMethods[input.value].countries.includes(country) &&
-            paymentMethods[input.value].currencies.includes(config.currency))
-      );
+
+      let pmAvailable = (
+          input.value === 'card' && !paymentMethods[input.value].countries_excluded.includes(country)
+        ) || (
+          config.paymentMethods.includes(input.value) &&
+          paymentMethods[input.value].countries.includes(country) &&
+          paymentMethods[input.value].currencies.includes(config.currency)
+        );
+
+      input.parentElement.classList.toggle('visible', pmAvailable);
+
+      
+      if (pmAvailable) {
+        input.checked = 'checked';
+        form.querySelector('.payment-info.' + input.value).classList.add('visible');
+        updateButtonLabel(input.value);
+      } else if (form.querySelector('.payment-info.' + input.value)) {
+        form.querySelector('.payment-info.' + input.value).classList.remove('visible');
+      }
     }
 
     // Hide the tabs if card is the only available option.
     const paymentMethodsTabs = document.getElementById('payment-methods');
     paymentMethodsTabs.classList.toggle(
       'visible',
-      paymentMethodsTabs.querySelectorAll('li.visible').length > 1
+      paymentMethodsTabs.querySelectorAll('li.visible').length >= 1
     );
 
     // Check the first payment option again.
+    /*
     paymentInputs[0].checked = 'checked';
     form.querySelector('.payment-info.card').classList.add('visible');
     form.querySelector('.payment-info.ideal').classList.remove('visible');
@@ -809,6 +1002,7 @@
     form.querySelector('.payment-info.redirect').classList.remove('visible');
     form.querySelector('.payment-info.id_credit_transfer').classList.remove('visible');
     updateButtonLabel(paymentInputs[0].value);
+    */
   };
 
   // Listen to changes to the payment method selector.
@@ -860,4 +1054,8 @@
     country = countryParam;
   }
   selectCountry(country);
+
+  // Trigger generate 
+  const generateInputTrigger = document.getElementById('generate');
+  generateInputTrigger.click();
 })();

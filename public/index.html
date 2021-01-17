@@ -18,8 +18,8 @@
 <body>
   <main id="main" class="loading">
     <header class="header">
-      <a class="shop" href="/">Stripe Payments Demo</a>
-      <a class="github" href="https://github.com/stripe/stripe-payments-demo">View on GitHub</a>
+      <a class="shop" href="/">Stripe Indonesia Payments Demo</a>
+      <a class="github" href="https://github.com/jackiekong-stripe/stripe-payments-demo">View on GitHub</a>
     </header>
     <div id="checkout">
       <div id="payment-request">
@@ -37,6 +37,10 @@
             <label>
               <span>Email</span>
               <input name="email" type="email" class="field" placeholder="jenny@example.com" required>
+            </label>
+            <label>
+              <span>Phone</span>
+              <input name="phone" class="field" placeholder="+6512345678" required>
             </label>
             <label>
               <span>Address</span>
@@ -142,7 +146,7 @@
               </li>
               <li>
                 <input type="radio" name="payment" id="payment-id_credit_transfer" value="id_credit_transfer">
-                <label for="payment-id_credit_transfer">Ind Credit Transfer</label>
+                <label for="payment-id_credit_transfer">Bank Transfer</label>
               </li>
             </ul>
           </nav>
@@ -171,12 +175,19 @@
                 <span>Select Bank</span>
                 <div class="field">
                   <select id="id-ct-element" class="bni">
-                    <option value="bni" class="Icon SelectListItemIcon">Bank Negara Indonesia</option>
-                    <option value="bca" class="Icon SelectListItemIcon">Bank Central Asia</option>
+                    <option value="bni" class="Icon SelectListItemIcon">BNI (Bank Negara Indonesia) &amp; Others</option>
+                    <option value="bca" class="Icon SelectListItemIcon">BCA (Bank Central Asia)</option>
+                    <option value="mandiri" class="Icon SelectListItemIcon">Mandiri</option>
                   </select>
                 </div>
               </label>
             </fieldset>
+            <p class="notice instructions">
+              Payment can be made via an ATM, Internet or Mobile Banking, or at a local Indonesian bank branch
+            </p>
+            <p class="notice instructions">
+              The payment will only be valid for 25 hours or the order will be canceled
+            </p>
           </div>
           <div class="payment-info ideal">
             <fieldset>
@@ -211,10 +222,11 @@
       <div class="status success">
         <h1>Thanks for your order!</h1>
         <p>Woot! You successfully made a payment with Stripe.</p>
+        <p id="confirmation-custom"></p>
         <p class="note">We just sent your receipt to your email address, and your items will be on their way shortly.</p>
       </div>
       <div class="status receiver">
-        <h1>Thanks! One last step!</h1>
+        <h1>Thanks! One last step! Waiting for payment</h1>
         <p>Please make a payment using the details below to complete your order.</p>
         <div class="info"></div>
       </div>
